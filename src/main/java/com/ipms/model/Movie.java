@@ -1,5 +1,6 @@
 package com.ipms.model;
 
+import java.util.List;
 import java.util.Set;
 
 import jakarta.persistence.*;
@@ -23,4 +24,8 @@ public class Movie{
 
     @OneToMany(mappedBy = "movie")
     private Set<UserMovie> userMovies;
+
+    @OneToMany(mappedBy = "movie",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
+    @OrderBy("createdAt ASC")
+    private List<Scripts> scripts;
 }

@@ -56,4 +56,18 @@ public class UserService {
             throw new RuntimeException("Login Error: " + e.getMessage());
         }
     }
+
+    public User getUser(Long userId){
+        try{
+            Optional<User> optUser = userRepository.findById(userId);
+            if(optUser.isEmpty()){
+                throw new RuntimeException("User not found!");
+            }
+            User user = optUser.get();
+            return user;
+        }
+        catch(Exception e){
+            throw new RuntimeException("User Error: " + e.getMessage());
+        }
+    }
 }

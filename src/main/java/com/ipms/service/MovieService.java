@@ -7,16 +7,31 @@ import com.ipms.model.*;
 import com.ipms.repository.*;
 
 import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
 
 @Service
-@RequiredArgsConstructor
 public class MovieService{
     
     private final UserMovieRepository umRepository;
     private final MovieRepository movieRepository;
     private final UserRepository userRepository;
+    
+    public MovieService(UserMovieRepository umr,MovieRepository mr,UserRepository ur){
+        umRepository = umr;
+        movieRepository = mr;
+        userRepository = ur;
+    }
 
+    public Movie addMovie(String title,String genre){
+        try{
+            Movie movie = new Movie();
+            movie.setTitle(title);
+            movie.setGenre(genre);
+            return movieRepository.save(movie);
+        }   
+        catch(Exception e){
+            throw new RuntimeException("Some error occured!");
+        }
+    }
 
     @Transactional
     public UserMovie addUserToMovie(Long movieId,Long userId,String role){
