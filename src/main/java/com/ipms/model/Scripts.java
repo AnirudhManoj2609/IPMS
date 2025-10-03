@@ -27,6 +27,8 @@ public class Scripts{
     @Column(columnDefinition = "TEXT")
     private String scriptText;
 
+    private String pdfLink;
+
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt;
 }
