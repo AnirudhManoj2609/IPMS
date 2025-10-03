@@ -1,5 +1,13 @@
+com/ipms/dto/UserDto.class
+com/ipms/model/UserMovie.class
+com/ipms/response/UserResponse.class
+com/ipms/Application.class
+com/ipms/dto/LoginDto.class
+com/ipms/repository/UserMovieRepository.class
+com/ipms/model/Movie.class
 com/ipms/service/UserService.class
 com/ipms/controller/AuthController.class
-com/ipms/repository/UserRepository.class
-com/ipms/Application.class
 com/ipms/model/User.class
+com/ipms/repository/MovieRepository.class
+com/ipms/service/MovieService.class
+com/ipms/repository/UserRepository.class

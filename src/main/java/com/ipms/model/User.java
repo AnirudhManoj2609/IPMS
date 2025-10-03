@@ -1,5 +1,7 @@
 package com.ipms.model;
 
+import java.util.Set;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -27,4 +29,7 @@ public class User {
 
     @NotBlank
     private String role;
+
+    @OneToMany(mappedBy = "user")
+    private Set<UserMovie> userMovies;
 }

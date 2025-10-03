@@ -1,5 +1,13 @@
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/Application.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/controller/AuthController.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/dto/LoginDto.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/dto/UserDto.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/model/Movie.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/model/User.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/model/UserMovie.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/repository/MovieRepository.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/repository/UserMovieRepository.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/repository/UserRepository.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/response/UserResponse.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/service/MovieService.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/service/UserService.java

@@ -1,5 +1,7 @@
 package com.ipms.model;
 
+import java.util.Set;
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -19,10 +21,6 @@ public class Movie{
     private String title;
     private String genre;
 
-    @Column(columnDefinition = "jsonb")
-    private String roleData;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User user;
+    @OneToMany(mappedBy = "movie")
+    private Set<UserMovie> userMovies;
 }
