@@ -1,9 +1,8 @@
 package com.ipms.dto;
 
-import jakarta.persistence.*;
 import lombok.*;
 
-@Entity
+
 @Data
 public class UserDto{
   
@@ -16,3 +15,5 @@ public class UserDto{
 
     private String role;
 }
+
+

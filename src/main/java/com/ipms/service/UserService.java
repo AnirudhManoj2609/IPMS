@@ -1,8 +1,10 @@
 package com.ipms.service;
 
 import com.ipms.repository.*;
-import com.ipms.dto.UserDto;
+import com.ipms.dto.*;
 import com.ipms.model.*;
+
+import java.util.Optional;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,22 @@ public class UserService {
         }
         catch(Exception e){
             throw e;
+        }
+    }
+    public User loginUser(LoginDto loginDto){
+        try{
+            Optional<User> optUser = userRepository.findByEmail(loginDto.getEmail());
+            if(optUser.isEmpty()){
+                throw new RuntimeException("User not found: " + loginDto.getEmail());
+            }
+            User user = optUser.get();
+            if(!passwordEncoder.matches(loginDto.getPassword(), user.getPassword())) {
+                throw new RuntimeException("Invalid password");
+            }
+            return user;
+        }
+        catch(Exception e){
+            throw new RuntimeException("Login Error: " + e.getMessage());
         }
     }
 }
