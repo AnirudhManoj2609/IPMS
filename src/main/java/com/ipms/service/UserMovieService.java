@@ -74,5 +74,15 @@ public class UserMovieService {
             throw new RuntimeException("Batch analysis failed to process or save parameters.", e);
         }
     }
-    
+
+    public Long getUserIdFromUsername(String username) throws Exception {
+        return userRepository.findByUsername(username)
+                       .orElseThrow(() -> new Exception("User not found"))
+                       .getId();
+    }
+
+    // Check if a user is a collaborator on a movie
+    public boolean isUserInMovie(Long userId, Long movieId) {
+        return userMovieRepository.existsByUserIdAndMovieId(userId, movieId);
+    }
 }
