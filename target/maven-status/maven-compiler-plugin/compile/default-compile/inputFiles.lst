@@ -1,4 +1,5 @@
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/Application.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/config/AppConfig.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/controller/AuthController.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/controller/MovieController.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/controller/ScriptController.java
@@ -16,5 +17,6 @@
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/repository/UserRepository.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/response/UserResponse.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/service/MovieService.java
+/home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/service/ScriptAnalysisClient.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/service/ScriptService.java
 /home/anirudhmanoj/Documents/IPMS/src/main/java/com/ipms/service/UserService.java

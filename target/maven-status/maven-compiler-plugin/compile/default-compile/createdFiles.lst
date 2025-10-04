@@ -1,5 +1,6 @@
 com/ipms/dto/UserDto.class
 com/ipms/dto/MovieDto.class
+com/ipms/config/AppConfig.class
 com/ipms/model/UserMovie.class
 com/ipms/controller/MovieController.class
 com/ipms/response/UserResponse.class
@@ -13,6 +14,7 @@ com/ipms/service/UserService.class
 com/ipms/controller/AuthController.class
 com/ipms/dto/ScriptDto.class
 com/ipms/model/User.class
+com/ipms/service/ScriptAnalysisClient.class
 com/ipms/repository/MovieRepository.class
 com/ipms/model/Scripts.class
 com/ipms/service/MovieService.class

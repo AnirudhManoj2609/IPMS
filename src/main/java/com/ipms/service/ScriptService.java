@@ -10,15 +10,23 @@ import com.ipms.model.*;
 import com.ipms.repository.MovieRepository;
 import com.ipms.repository.ScriptRepository;
 
+import jakarta.transaction.Transactional;
+
 @Service
 public class ScriptService{
     
+    private final ScriptAnalysisClient analysisClient;
     private final ScriptRepository sRepository;
     private final MovieRepository mRepository;
+    private final UserMovieService userMovieService; // Inject this
 
-    public ScriptService(ScriptRepository sr,MovieRepository mr){
+    
+
+    public ScriptService(ScriptAnalysisClient SAC,ScriptRepository sr,MovieRepository mr,UserMovieService UMS){
         sRepository = sr;
         mRepository = mr;
+        userMovieService = UMS; 
+        analysisClient = SAC;
     }
 
     public Scripts addScript(Long movieId,String title,String content,MultipartFile pdfFile){
@@ -50,5 +58,21 @@ public class ScriptService{
 
     public List<Scripts> getScriptsByMovie(Long movieId){
         return sRepository.findByMovieId(movieId);
+    }
+
+    @Transactional
+    public void processBatchScriptAnalysis(Long movieId, String pdfPath) {
+        System.out.println("Starting batch analysis for Movie ID: " + movieId);
+        
+        // 1. Get the combined analysis JSON from FastAPI
+        String fullAnalysisResultJson = analysisClient.analyzeScriptPdf(pdfPath);
+        
+        if (fullAnalysisResultJson == null) {
+            System.err.println("Batch analysis failed to retrieve results from FastAPI.");
+            // Decide if you want to throw an exception here
+            return;
+        }
+        
+        userMovieService.updateAllMovieUsersWithAnalysis(movieId, fullAnalysisResultJson);
     }
 }
