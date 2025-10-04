@@ -1,6 +1,56 @@
+PyPDF2==3.0.1
+# requirements.txt
+
+# Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-anthropic==0.39.0
-PyPDF2==3.0.1
 python-multipart==0.0.6
 pydantic==2.5.0
+websockets==12.0
+
+# AI Framework - Core
+langchain==0.1.0
+langgraph==0.0.20
+
+# LLM Providers - Groq & Gemini (NO OpenAI!)
+groq==0.9.0
+google-generativeai==0.3.2
+
+# Alternative: Anthropic Claude (if you want options)
+anthropic==0.39.0
+
+# Vector DB & Memory
+chromadb==0.4.18
+redis==5.0.1
+
+# Database
+sqlalchemy==2.0.23
+
+# NLP & Processing
+spacy==3.7.2
+dateparser==1.2.0
+phonenumbers==8.13.27
+
+# Audio (Voice Assistant Features)
+openai-whisper==20231117
+elevenlabs==0.2.27
+pydub==0.25.1
+
+# Communication
+slack-sdk==3.26.1
+twilio==8.11.0
+
+# Background Tasks
+celery==5.3.4
+apscheduler==3.10.4
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+python-dotenv==1.0.0
+
+# PDF Processing
+PyPDF2==3.0.1
+
+# Optional: OpenAI only if you need embeddings
+# openai==1.3.0  # Uncomment only for embeddings API
