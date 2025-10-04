@@ -12,7 +12,7 @@ from groq import Groq
 
 app = FastAPI(title="Script Analyzer AI with Screenplay Generator", version="2.0.0")
 
-client = Groq(api_key="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")
+client = Groq(api_key="")
 
 app.add_middleware(
     CORSMiddleware,
