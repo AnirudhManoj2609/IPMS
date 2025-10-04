@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List; // Needed for the batch process
+import java.util.Optional;
 
 @Service
 public class UserMovieService {
@@ -85,4 +86,16 @@ public class UserMovieService {
     public boolean isUserInMovie(Long userId, Long movieId) {
         return userMovieRepository.existsByUserIdAndMovieId(userId, movieId);
     }
+
+    public String getUsernameFromId(Long userId){
+        Optional<User> um =  userRepository.findById(userId);
+        if(!um.isEmpty()){
+            User UM = um.get();
+            return UM.getUsername();
+        }
+        else{
+            throw new RuntimeException("User not found!");
+        }
+    }
+
 }

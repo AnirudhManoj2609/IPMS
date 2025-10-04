@@ -2,97 +2,46 @@ import os
 import re
 import json
 from io import BytesIO
-from typing import List, Union
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from typing import List, Union, Optional
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import PyPDF2
 from groq import Groq
 
-# --- Initialization ---
-app = FastAPI(title="Unified Script Analyzer AI", version="1.0.0")
-client = Groq(api_key="KEYY") # Replace KEYY with your actual Groq API key
+app = FastAPI(title="Script Analyzer AI", version="1.0.0")
+client = Groq(api_key="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")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
+                   allow_methods=["*"], allow_headers=["*"])
 
-# --- Shared Utilities ---
-
-def extract_text_from_pdf(pdf_file: BytesIO) -> (str, int):
+# Shared Utilities
+def extract_text_from_pdf(pdf_file: BytesIO) -> tuple:
     pdf_reader = PyPDF2.PdfReader(pdf_file)
-    full_text = ""
-    page_count = 0
-    for page in pdf_reader.pages:
-        text = page.extract_text()
-        if text:
-            full_text += text + "\n\n"
-            page_count += 1
-    return full_text, page_count
+    text = "\n\n".join(p.extract_text() for p in pdf_reader.pages if p.extract_text())
+    return text, len(pdf_reader.pages)
 
-def call_groq(prompt: str, max_tokens: int, temperature: float = 0.3) -> str:
+def call_groq(prompt: str, max_tokens: int = 8000) -> str:
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
+        temperature=0.3,
         max_tokens=max_tokens
     )
     return response.choices[0].message.content
 
-def extract_json_from_response(response_text: str) -> str:
-    # Extracts JSON object from response, handling markdown fences (```json)
-    json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', response_text, re.DOTALL)
-    if json_match:
-        return json_match.group(1)
-    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-    if json_match:
-        return json_match.group(0)
-    return response_text
+def extract_json(text: str) -> str:
+    match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
+    if match: return match.group(1)
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    return match.group(0) if match else text
 
-def split_script_into_chunks(script_text: str, chunk_size_pages=5):
-    # Splits script text for models with token limits
-    words = script_text.split()
-    chunk_size_words = chunk_size_pages * 250
-    chunks = [ " ".join(words[i:i+chunk_size_words]) for i in range(0, len(words), chunk_size_words)]
-    return chunks
+def chunk_text(text: str, words_per_chunk=1250):
+    words = text.split()
+    return [" ".join(words[i:i+words_per_chunk]) for i in range(0, len(words), words_per_chunk)]
 
-# --- 1. Director/Production Models ---
-
-class DirectorCharacter(BaseModel):
-    name: str
-    role: str
-    description: str
-    first_appearance_scene: int
-    total_scenes: int
-    suggested_casting_notes: str
-
-class DirectorLocation(BaseModel):
-    name: str
-    type: str
-    scenes: List[int]
-    total_scenes: int
-    logistical_notes: str
-    estimated_setup_complexity: str
-
-class DirectorProp(BaseModel):
-    name: str
-    category: str
-    scenes: List[int]
-    importance: str
-    description: str
-
-class DirectorSpecialRequirement(BaseModel):
-    type: str
-    description: str
-    scenes: List[int]
-    complexity: str
-    estimated_cost_impact: str
-
-class DirectorScene(BaseModel):
+# Enhanced Models
+class BaseScene(BaseModel):
     scene_number: int
     scene_heading: str
     int_ext: str
@@ -100,448 +49,595 @@ class DirectorScene(BaseModel):
     time_of_day: str
     page_count: float
     description: str
+
+class LocationDetails(BaseModel):
+    name: str
+    type: str
+    scenes: List[int]
+    total_scenes: int
+    primary_recommendation: str
+    recommendation_justification: str
+    alternative_locations: List[dict]  # [{"name": "", "pros": "", "cons": "", "cost_difference": ""}]
+    logistical_notes: str
+    estimated_setup_complexity: str
+    travel_distance_from_base_km: int
+    travel_cost_estimate: str
+    accessibility_notes: str
+    permit_requirements: str
+
+class BudgetBreakdown(BaseModel):
+    category: str
+    estimated_cost: str
+    cost_range_min: int
+    cost_range_max: int
+    justification: str
+    cost_drivers: List[str]
+    potential_savings: List[str]
+
+class DirectorScene(BaseScene):
     characters: List[str]
     props: List[str]
     special_requirements: List[str]
     estimated_setup_time_minutes: int
     estimated_shoot_time_minutes: int
     complexity_score: int
+    location_budget_impact: str
+    crew_meals_count: int
+    transportation_needs: str
 
-class DirectorScriptAnalysis(BaseModel):
+class DirectorAnalysis(BaseModel):
     script_title: str
     total_pages: int
     total_scenes: int
     estimated_shoot_days: int
     estimated_budget_range: str
+    budget_breakdown: List[BudgetBreakdown]
+    total_predicted_budget: dict  # {"min": int, "max": int, "currency": "INR/USD"}
     scenes: List[DirectorScene]
-    characters: List[DirectorCharacter]
-    locations: List[DirectorLocation]
-    props: List[DirectorProp]
-    special_requirements: List[DirectorSpecialRequirement]
+    characters: List[dict]
+    locations: List[LocationDetails]
+    props: List[dict]
+    special_requirements: List[dict]
     genre: str
     tone: str
     shooting_complexity: str
     key_challenges: List[str]
     budget_considerations: List[str]
     scheduling_recommendations: List[str]
+    logistics_summary: dict  # {"total_travel_cost": "", "accommodation_nights": 0, "meal_budget": ""}
 
-# --- 2. Cinematography Models ---
-
-class CameraEquipment(BaseModel):
-    camera_body: str
-    lenses_required: List[str]
-    stabilization: List[str]
-    specialty_rigs: List[str]
-    filters_needed: List[str]
-    justification: str
-
-class CameraLightingSetup(BaseModel):
-    scene_number: int
-    location: str
-    time_of_day: str
-    lighting_style: str
-    key_lights: List[str]
-    fill_lights: List[str]
-    practical_lights: List[str]
-    modifiers_needed: List[str]
-    power_requirements: str
-    setup_complexity: str
-    estimated_setup_time_minutes: int
-
-class CameraShot(BaseModel):
-    shot_number: str
-    scene_number: int
-    shot_type: str
-    shot_size: str
-    camera_angle: str
-    camera_movement: str
-    lens_focal_length: str
-    aperture_recommendation: str
-    frame_rate: str
-    stabilization_required: str
-    special_equipment: List[str]
-    lighting_notes: str
-    composition_notes: str
-    estimated_setup_time_minutes: int
-    estimated_shoot_time_minutes: int
-    technical_difficulty: str
-
-class CameraScene(BaseModel):
-    scene_number: int
-    scene_heading: str
-    int_ext: str
-    location: str
-    time_of_day: str
-    page_count: float
-    description: str
+class CameraScene(BaseScene):
     total_shots_estimated: int
     primary_camera_positions: List[str]
     recommended_camera_package: str
     lighting_approach: str
-    power_requirements: str
     crew_size_recommendation: int
     gimbal_required: bool
     crane_dolly_required: bool
     drone_required: bool
-    underwater_required: bool
     special_fps_required: str
-    color_temperature_notes: str
     estimated_setup_time_minutes: int
     estimated_shoot_time_minutes: int
     technical_complexity_score: int
+    post_production_requirements: dict  # {"editing_complexity": "", "vfx_shots": 0, "vfx_complexity": "", "color_grading_hours": 0, "vfx_percentage": 0}
+    estimated_post_budget: str
 
-class CameraMovement(BaseModel):
-    movement_type: str
-    scenes: List[int]
-    total_occurrences: int
-    equipment_needed: str
-    crew_expertise_level: str
-    notes: str
+class PostProductionBreakdown(BaseModel):
+    category: str  # "Editing", "VFX", "Color Grading", "Sound Design"
+    total_hours_estimated: int
+    complexity_level: str
+    estimated_cost: str
+    percentage_of_total_post: int
+    key_requirements: List[str]
 
-class CameraVisualEffect(BaseModel):
-    effect_type: str
-    description: str
-    scenes: List[int]
-    camera_requirements: str
-    pre_production_notes: str
-    on_set_requirements: str
-    post_production_notes: str
-
-class CameraScriptAnalysis(BaseModel):
+class CameraAnalysis(BaseModel):
     script_title: str
     total_pages: int
     total_scenes: int
     estimated_shoot_days: int
     overall_visual_style: str
-    cinematography_genre: str
     aspect_ratio_recommendation: str
-    color_grading_approach: str
-    reference_films: List[str]
     scenes: List[CameraScene]
-    shots: List[CameraShot]
-    lighting_setups: List[CameraLightingSetup]
-    camera_equipment: CameraEquipment
-    camera_movements: List[CameraMovement]
-    visual_effects: List[CameraVisualEffect]
+    shots: List[dict]
+    lighting_setups: List[dict]
+    camera_equipment: dict
     overall_technical_complexity: str
     key_technical_challenges: List[str]
-    pre_production_requirements: List[str]
     equipment_rental_budget_estimate: str
     crew_recommendations: dict
-    location_scouting_priorities: List[str]
+    post_production_breakdown: List[PostProductionBreakdown]
+    total_post_production_budget: str
+    vfx_summary: dict  # {"total_vfx_shots": 0, "vfx_percentage_of_project": 0, "estimated_vfx_budget": ""}
 
-# --- New Unified Response Model ---
+class CostumeAnalysis(BaseModel):
+    script_title: str
+    total_pages: int
+    total_scenes: int
+    characters: List[dict]
+    scenes: List[dict]
+    wardrobe_budget_estimate: str
+    continuity_guidelines: List[str]
+
 class AllAnalysesResult(BaseModel):
     script_title: str
     total_pages: int
-    director_analysis: Union[DirectorScriptAnalysis, dict, None] = None
-    cinematographer_analysis: Union[CameraScriptAnalysis, dict, None] = None
+    director_analysis: Optional[Union[DirectorAnalysis, dict]] = None
+    cinematographer_analysis: Optional[Union[CameraAnalysis, dict]] = None
+    costume_analysis: Optional[Union[CostumeAnalysis, dict]] = None
 
-
-# --- 3. Role-Specific Analysis Functions (Full Prompts Inserted) ---
-
-def analyze_for_director(script_text: str, page_count: int) -> dict:
-    # Full prompt for the Director/Production role
-    prompt = f"""
-You are an expert film director and production manager. Analyze this script for character, location, logistics, casting, and overall production planning.
-Your primary focus is on the human element, logistics, budget, and schedule.
-
-Return ONLY a JSON matching this schema exactly. Do not wrap it in markdown code blocks:
+# Enhanced Prompts with Detailed Casting Instructions
+DIRECTOR_PROMPT = """Expert film director & production manager: analyze for comprehensive production planning with detailed budgeting and location analysis. Return JSON only:
 
 {{
-  "script_title": "string",
-  "total_pages": {page_count},
+  "script_title": "",
+  "total_pages": {pages},
   "total_scenes": 0,
   "estimated_shoot_days": 0,
-  "estimated_budget_range": "string",
+  "estimated_budget_range": "",
+  "budget_breakdown": [
+    {{
+      "category": "Cast & Crew",
+      "estimated_cost": "₹X - ₹Y",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "Detailed breakdown of why this cost",
+      "cost_drivers": ["Lead actor fees", "Crew size", "Shoot duration"],
+      "potential_savings": ["Use emerging actors", "Reduce crew overtime"]
+    }},
+    {{
+      "category": "Locations & Permits",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "",
+      "cost_drivers": [],
+      "potential_savings": []
+    }},
+    {{
+      "category": "Equipment Rental",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "",
+      "cost_drivers": [],
+      "potential_savings": []
+    }},
+    {{
+      "category": "Transportation & Logistics",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "",
+      "cost_drivers": ["Distance to locations", "Vehicle rentals", "Fuel costs"],
+      "potential_savings": []
+    }},
+    {{
+      "category": "Accommodation",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "Based on crew size and shoot days",
+      "cost_drivers": ["Hotel rates", "Number of nights", "Crew size"],
+      "potential_savings": ["Negotiate bulk rates", "Local crew members"]
+    }},
+    {{
+      "category": "Food & Catering",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "Per person per day costs × crew × days",
+      "cost_drivers": ["Crew size", "Meal frequency", "Location remoteness"],
+      "potential_savings": ["Local caterers", "Simplified menu"]
+    }},
+    {{
+      "category": "Props & Set Dressing",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "",
+      "cost_drivers": [],
+      "potential_savings": []
+    }},
+    {{
+      "category": "Costumes & Makeup",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "",
+      "cost_drivers": [],
+      "potential_savings": []
+    }},
+    {{
+      "category": "Post-Production",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "",
+      "cost_drivers": [],
+      "potential_savings": []
+    }},
+    {{
+      "category": "Contingency (10-15%)",
+      "estimated_cost": "",
+      "cost_range_min": 0,
+      "cost_range_max": 0,
+      "justification": "Buffer for unexpected costs",
+      "cost_drivers": ["Weather delays", "Equipment issues"],
+      "potential_savings": []
+    }}
+  ],
+  "total_predicted_budget": {{
+    "min": 0,
+    "max": 0,
+    "currency": "INR",
+    "breakdown_by_phase": {{
+      "pre_production": "₹X",
+      "production": "₹Y",
+      "post_production": "₹Z"
+    }},
+    "comparison_notes": "This budget is X% higher/lower than similar indie/commercial productions because..."
+  }},
   "characters": [
     {{
-      "name": "string",
-      "role": "string",
-      "description": "string",
+      "name": "Character Name",
+      "role": "Lead/Supporting/Minor",
+      "description": "Detailed character description",
       "first_appearance_scene": 0,
       "total_scenes": 0,
-      "suggested_casting_notes": "string"
+      "suggested_casting_notes": "PROVIDE SPECIFIC ACTOR NAMES with detailed analysis in this format:\n\n- Fahadh Faasil (Age: 41): Perfect for complex characters requiring subtle intensity. Recent standout performances in 'Malik' (IMDb 7.9/10) and 'Joji' (IMDb 7.6/10) showcase his ability to portray morally ambiguous protagonists. His restrained acting style suits contemplative roles. National Award winner with consistent box office appeal in Malayalam cinema.\n\n- Dulquer Salmaan (Age: 38): Versatile actor excellent for charismatic leads. Recent successes include 'Kurup' (IMDb 7.2/10) and 'Sita Ramam' (IMDb 8.1/10). Strong pan-Indian appeal with proven track record in romantic and action genres. Commands higher fee but brings significant star power and youth appeal.\n\n- Tovino Thomas (Age: 35): Rising star perfect for action-oriented and intense roles. Recent blockbuster 'Minnal Murali' (IMDb 7.8/10) and '2018' (IMDb 8.0/10) demonstrate his range and physicality. More budget-friendly than established stars while delivering compelling performances. Strong social media presence appeals to younger demographics.\n\nNOTE: For characters under 18, ONLY suggest actors who are actually close to that age. Example for 15-year-old character:\n\n- Anaswara Rajan (Age: 20): Young actress who can convincingly portray teenage roles. Notable performance in 'Varane Avashyamund' (IMDb 7.1/10). Age-appropriate casting crucial for authenticity."
     }}
   ],
   "locations": [
     {{
-      "name": "string",
-      "type": "INT/EXT",
-      "scenes": [0],
-      "total_scenes": 0,
-      "logistical_notes": "string",
-      "estimated_setup_complexity": "Low/Medium/High"
+      "name": "Beach Coastline",
+      "type": "EXT",
+      "scenes": [1, 5, 12],
+      "total_scenes": 3,
+      "primary_recommendation": "Kovalam Beach, Thiruvananthapuram",
+      "recommendation_justification": "Less crowded than Varkala, better golden hour lighting, easier permit process, 45km from city base",
+      "alternative_locations": [
+        {{
+          "name": "Varkala Beach",
+          "pros": "Dramatic cliffs, more scenic",
+          "cons": "Tourist heavy, harder crowd control, 30% more expensive permits",
+          "cost_difference": "+₹50,000"
+        }},
+        {{
+          "name": "Marari Beach",
+          "pros": "Pristine, less crowded",
+          "cons": "120km from base, higher travel costs, limited nearby facilities",
+          "cost_difference": "+₹80,000 (travel & accommodation)"
+        }}
+      ],
+      "logistical_notes": "Requires police permission, best shot during 6-9 AM or 4-6 PM",
+      "estimated_setup_complexity": "Medium",
+      "travel_distance_from_base_km": 45,
+      "travel_cost_estimate": "₹15,000 (round trip for 3 days, 2 vehicles)",
+      "accessibility_notes": "Good road access, parking available 200m from beach",
+      "permit_requirements": "Tourism Department + Local Police NOC, ₹5,000"
     }}
   ],
   "props": [
     {{
-      "name": "string",
-      "category": "string",
-      "scenes": [0],
-      "importance": "Low/Medium/High",
-      "description": "string"
+      "name": "",
+      "category": "",
+      "scenes": [],
+      "importance": "",
+      "description": ""
     }}
   ],
   "special_requirements": [
     {{
-      "type": "string",
-      "description": "string",
-      "scenes": [0],
-      "complexity": "Low/Medium/High",
-      "estimated_cost_impact": "Low/Medium/High"
+      "type": "",
+      "description": "",
+      "scenes": [],
+      "complexity": "",
+      "estimated_cost_impact": ""
     }}
   ],
   "scenes": [
     {{
       "scene_number": 0,
-      "scene_heading": "string",
-      "int_ext": "INT/EXT",
-      "location": "string",
-      "time_of_day": "string",
+      "scene_heading": "",
+      "int_ext": "",
+      "location": "",
+      "time_of_day": "",
       "page_count": 0,
-      "description": "string",
-      "characters": ["string"],
-      "props": ["string"],
-      "special_requirements": ["string"],
+      "description": "",
+      "characters": [],
+      "props": [],
+      "special_requirements": [],
       "estimated_setup_time_minutes": 0,
       "estimated_shoot_time_minutes": 0,
-      "complexity_score": 0
+      "complexity_score": 0,
+      "location_budget_impact": "Low/Medium/High - explain why",
+      "crew_meals_count": 0,
+      "transportation_needs": "Local/Medium-distance/Remote"
     }}
   ],
-  "genre": "string",
-  "tone": "string",
-  "shooting_complexity": "Low/Medium/High",
-  "key_challenges": ["string"],
-  "budget_considerations": ["string"],
-  "scheduling_recommendations": ["string"]
+  "genre": "",
+  "tone": "",
+  "shooting_complexity": "",
+  "key_challenges": [],
+  "budget_considerations": [
+    "Compare this budget to similar Malayalam films",
+    "Highlight cost-intensive elements",
+    "Suggest budget optimization strategies"
+  ],
+  "scheduling_recommendations": [],
+  "logistics_summary": {{
+    "total_travel_cost": "₹X across all locations",
+    "accommodation_nights": 0,
+    "accommodation_cost": "₹Y",
+    "meal_budget": "₹Z (crew size × days × ₹300 per person per day)",
+    "total_logistics_cost": "₹A",
+    "logistics_percentage_of_budget": "X%"
+  }}
 }}
 
-Analyze this script and fill in all fields exactly as above. For the suggested_casting_notes field in each character, provide multiple suggestions (at least 2-3) of only **Malayalam and other Indian actors** who excel in similar roles. For characters under 18, suggest only actors who are close to the character’s age. Do not suggest adult actors. Include their age, experience, and IMDb ratings if possible based on their performances in recent movies (from the last 5-10 years), current trends, and stardom. Include references to their IMDb ratings for relevant films or overall, and explain why they fit the role. Format the notes as a bulleted list, e.g., '- Actor Name: Reason including recent movie examples and IMDb rating.'. Script:
-{script_text}
-"""
-    response_text = call_groq(prompt, max_tokens=8000) # Director analysis can be large
-    json_text = extract_json_from_response(response_text)
-    try:
-        return json.loads(json_text)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response as JSON for Director: {str(e)}")
+CRITICAL CASTING INSTRUCTIONS:
+1. For EACH character, provide AT LEAST 2-3 SPECIFIC Malayalam/Indian actor names (NOT generic descriptions)
+2. For each suggested actor, include:
+   - Actor's full name and current age
+   - Recent film examples from last 5-10 years with IMDb ratings
+   - Why they fit the role (acting style, previous similar roles, physical characteristics)
+   - Awards, recognition, or box office track record
+   - Fee range if relevant to budget considerations
+3. For characters UNDER 18: ONLY suggest actors who are actually close to that age in real life
+4. Format as bullet points with detailed explanations
+5. Consider both star power vs budget constraints
+6. Include mix of established stars, rising talents, and budget-friendly options
 
-def analyze_for_cinematographer(script_text: str, page_count: int) -> dict:
-    # Full prompt for the Cinematographer role
-    prompt = f"""
-You are an expert cinematographer and camera department head. Analyze this script ONLY from the camera team's perspective.
+Example of CORRECT format:
+"suggested_casting_notes": "- Parvathy Thiruvothu (Age: 36): National Award-winning actress ideal for emotionally complex female leads. Exceptional in 'Take Off' (IMDb 8.1/10) and 'Uyare' (IMDb 8.0/10). Known for choosing content-driven cinema. Fee: ₹40-60 lakhs.\n\n- Nimisha Sajayan (Age: 26): Rising star perfect for raw, authentic performances. Breakthrough role in 'The Great Indian Kitchen' (IMDb 8.3/10). More budget-friendly at ₹15-25 lakhs while delivering award-worthy performances."
 
-Return ONLY a JSON matching this schema exactly. Do not wrap it in markdown code blocks:
+IMPORTANT: 
+- Calculate meal costs based on: crew size × shoot days × 3 meals × ₹300 per meal
+- Calculate accommodation: crew size × nights × ₹1500 per night average
+- Calculate travel: distance × fuel cost + vehicle rental
+- Compare budget to similar regional productions
+- Provide specific rupee amounts in final numbers
+- ALWAYS give SPECIFIC actor names with detailed analysis, NEVER generic suggestions
+
+Script: {script}"""
+
+CAMERA_PROMPT = """Expert cinematographer: analyze with detailed post-production requirements. Return JSON only:
 
 {{
-  "script_title": "string",
-  "total_pages": {page_count},
+  "script_title": "",
+  "total_pages": {pages},
   "total_scenes": 0,
   "estimated_shoot_days": 0,
-  "overall_visual_style": "string (e.g., naturalistic, stylized, documentary, noir, etc.)",
-  "cinematography_genre": "string",
-  "aspect_ratio_recommendation": "string (e.g., 2.39:1, 1.85:1, 16:9)",
-  "color_grading_approach": "string (e.g., warm/cool tones, high contrast, desaturated)",
-  "reference_films": ["film names with similar visual style"],
+  "overall_visual_style": "",
+  "cinematography_genre": "",
+  "aspect_ratio_recommendation": "",
+  "color_grading_approach": "",
+  "reference_films": [],
   "scenes": [
     {{
       "scene_number": 0,
-      "scene_heading": "string",
-      "int_ext": "INT/EXT",
-      "location": "string",
-      "time_of_day": "string",
-      "page_count": 0.0,
-      "description": "string",
+      "scene_heading": "",
+      "int_ext": "",
+      "location": "",
+      "time_of_day": "",
+      "page_count": 0,
+      "description": "",
       "total_shots_estimated": 0,
-      "primary_camera_positions": ["positions like wide master, close-ups, OTS, etc."],
-      "recommended_camera_package": "string (e.g., Arri Alexa Mini, RED Komodo, etc.)",
-      "lighting_approach": "string (e.g., natural light, three-point, motivated practicals)",
-      "power_requirements": "string (e.g., 100A service, battery-powered, etc.)",
+      "primary_camera_positions": [],
+      "recommended_camera_package": "",
+      "lighting_approach": "",
+      "power_requirements": "",
       "crew_size_recommendation": 0,
       "gimbal_required": false,
       "crane_dolly_required": false,
       "drone_required": false,
       "underwater_required": false,
-      "special_fps_required": "string (24fps, 48fps, 120fps, etc.)",
-      "color_temperature_notes": "string (e.g., 5600K daylight, 3200K tungsten mix)",
+      "special_fps_required": "",
+      "color_temperature_notes": "",
       "estimated_setup_time_minutes": 0,
       "estimated_shoot_time_minutes": 0,
-      "technical_complexity_score": 0
+      "technical_complexity_score": 0,
+      "post_production_requirements": {{
+        "editing_complexity": "Simple/Medium/Complex - explain why",
+        "vfx_shots": 0,
+        "vfx_complexity": "None/Basic/Medium/Complex - what type of VFX",
+        "color_grading_hours": 0,
+        "vfx_percentage": 0,
+        "vfx_description": "Detailed list of VFX needed (wire removal, compositing, CGI elements, etc.)",
+        "editing_notes": "Specific editing requirements (multicam, slow-mo, match cuts, etc.)"
+      }},
+      "estimated_post_budget": "₹X for this scene's post work"
     }}
   ],
   "shots": [
     {{
-      "shot_number": "string (e.g., 1A, 1B, 2A)",
+      "shot_number": "",
       "scene_number": 0,
-      "shot_type": "string (master, coverage, insert, etc.)",
-      "shot_size": "string (ECU, CU, MCU, MS, MLS, LS, ELS, etc.)",
-      "camera_angle": "string (eye-level, high, low, dutch, POV, etc.)",
-      "camera_movement": "string (static, pan, tilt, dolly, tracking, handheld, etc.)",
-      "lens_focal_length": "string (e.g., 24mm, 50mm, 85mm, 24-70mm zoom)",
-      "aperture_recommendation": "string (e.g., f/2.8, f/5.6, f/8)",
-      "frame_rate": "string (24fps, 48fps, 120fps, etc.)",
-      "stabilization_required": "string (tripod, gimbal, steadicam, dolly, handheld, etc.)",
-      "special_equipment": ["list of special gear needed"],
-      "lighting_notes": "string (describe lighting setup for this shot)",
-      "composition_notes": "string (rule of thirds, leading lines, symmetry, etc.)",
+      "shot_type": "",
+      "shot_size": "",
+      "camera_angle": "",
+      "camera_movement": "",
+      "lens_focal_length": "",
+      "aperture_recommendation": "",
+      "frame_rate": "",
+      "stabilization_required": "",
+      "special_equipment": [],
+      "lighting_notes": "",
+      "composition_notes": "",
       "estimated_setup_time_minutes": 0,
       "estimated_shoot_time_minutes": 0,
-      "technical_difficulty": "Low/Medium/High"
+      "technical_difficulty": "",
+      "requires_vfx": false,
+      "vfx_notes": ""
     }}
   ],
   "lighting_setups": [
     {{
       "scene_number": 0,
-      "location": "string",
-      "time_of_day": "string",
-      "lighting_style": "string (naturalistic, dramatic, high-key, low-key, etc.)",
-      "key_lights": ["list of key lights needed, e.g., ARRI M18, Aputure 600D"],
-      "fill_lights": ["list of fill lights"],
-      "practical_lights": ["list of practical lights in scene"],
-      "modifiers_needed": ["softboxes, diffusion, flags, scrims, etc."],
-      "power_requirements": "string",
-      "setup_complexity": "Low/Medium/High",
+      "location": "",
+      "time_of_day": "",
+      "lighting_style": "",
+      "key_lights": [],
+      "fill_lights": [],
+      "practical_lights": [],
+      "modifiers_needed": [],
+      "power_requirements": "",
+      "setup_complexity": "",
       "estimated_setup_time_minutes": 0
     }}
   ],
   "camera_equipment": {{
-    "camera_body": "string (recommended primary camera)",
-    "lenses_required": ["list of lenses needed for entire production"],
-    "stabilization": ["tripods, gimbals, steadicam, etc."],
-    "specialty_rigs": ["crane, dolly, drone, underwater housing, etc."],
-    "filters_needed": ["ND filters, polarizers, mist filters, etc."],
-    "justification": "string (explain why this package)"
+    "camera_body": "",
+    "lenses_required": [],
+    "stabilization": [],
+    "specialty_rigs": [],
+    "filters_needed": [],
+    "justification": ""
   }},
   "camera_movements": [
     {{
-      "movement_type": "string (dolly, crane, steadicam, handheld, etc.)",
-      "scenes": [0],
+      "movement_type": "",
+      "scenes": [],
       "total_occurrences": 0,
-      "equipment_needed": "string",
-      "crew_expertise_level": "string (basic, intermediate, expert)",
-      "notes": "string"
+      "equipment_needed": "",
+      "crew_expertise_level": "",
+      "notes": ""
     }}
   ],
   "visual_effects": [
     {{
-      "effect_type": "string (green screen, wire removal, CGI, etc.)",
-      "description": "string",
-      "scenes": [0],
-      "camera_requirements": "string (specific camera settings, markers, tracking points)",
-      "pre_production_notes": "string",
-      "on_set_requirements": "string (what camera team needs to capture)",
-      "post_production_notes": "string"
+      "effect_type": "",
+      "description": "",
+      "scenes": [],
+      "camera_requirements": "",
+      "pre_production_notes": "",
+      "on_set_requirements": "",
+      "post_production_notes": "",
+      "estimated_vfx_hours": 0,
+      "estimated_vfx_cost": ""
     }}
   ],
-  "overall_technical_complexity": "Low/Medium/High",
-  "key_technical_challenges": ["list of main camera/lighting challenges"],
-  "pre_production_requirements": ["tech scouts, camera tests, lighting tests, etc."],
-  "equipment_rental_budget_estimate": "string (e.g., $15,000-$25,000 for 10 days)",
-  "crew_recommendations": {{
-    "director_of_photography": 1,
-    "camera_operators": 0,
-    "first_ac": 0,
-    "second_ac": 0,
-    "dit": 0,
-    "gaffer": 1,
-    "best_boy_electric": 0,
-    "electricians": 0,
-    "key_grip": 1,
-    "best_boy_grip": 0,
-    "grips": 0,
-    "steadicam_operator": 0,
-    "drone_operator": 0
+  "post_production_breakdown": [
+    {{
+      "category": "Editing",
+      "total_hours_estimated": 0,
+      "complexity_level": "Basic/Intermediate/Advanced",
+      "estimated_cost": "₹X (₹Y per hour × Z hours)",
+      "percentage_of_total_post": 40,
+      "key_requirements": ["Multi-cam editing", "Color correction", "Sound sync"]
+    }},
+    {{
+      "category": "VFX",
+      "total_hours_estimated": 0,
+      "complexity_level": "",
+      "estimated_cost": "",
+      "percentage_of_total_post": 30,
+      "key_requirements": ["List specific VFX shots", "Green screen compositing", "Object removal"]
+    }},
+    {{
+      "category": "Color Grading",
+      "total_hours_estimated": 0,
+      "complexity_level": "",
+      "estimated_cost": "",
+      "percentage_of_total_post": 20,
+      "key_requirements": ["Cinematic look development", "Shot matching", "Style consistency"]
+    }},
+    {{
+      "category": "Sound Design & Mixing",
+      "total_hours_estimated": 0,
+      "complexity_level": "",
+      "estimated_cost": "",
+      "percentage_of_total_post": 10,
+      "key_requirements": ["ADR sessions", "Foley recording", "5.1 mixing"]
+    }}
+  ],
+  "total_post_production_budget": "₹X total for all post work",
+  "vfx_summary": {{
+    "total_vfx_shots": 0,
+    "vfx_percentage_of_project": 0,
+    "estimated_vfx_budget": "₹X",
+    "vfx_breakdown": {{
+      "compositing": "X shots, ₹Y",
+      "cgi_elements": "X shots, ₹Y",
+      "cleanup_removal": "X shots, ₹Y",
+      "motion_graphics": "X shots, ₹Y"
+    }},
+    "vfx_timeline": "X weeks for completion"
   }},
-  "location_scouting_priorities": ["list of what to look for during scouts from camera perspective"]
+  "overall_technical_complexity": "",
+  "key_technical_challenges": [],
+  "pre_production_requirements": [],
+  "equipment_rental_budget_estimate": "",
+  "crew_recommendations": {{}},
+  "location_scouting_priorities": []
 }}
 
-Analyze this script comprehensively from the camera department's perspective. Break down each scene into estimated shots with specific technical details. Consider lighting, equipment, movements, and all technical requirements. Be detailed and specific.
+IMPORTANT:
+- For each scene, calculate VFX percentage (shots requiring VFX / total shots × 100)
+- Estimate editing hours based on: basic scene = 4 hours, medium = 8 hours, complex = 16+ hours
+- Estimate VFX hours per shot: simple = 4-8 hours, medium = 16-32 hours, complex = 40+ hours
+- Calculate color grading: 2-4 hours per finished minute of footage
+- Provide specific cost estimates for Kerala/Indian post-production rates
 
-Script:
-{script_text}
-"""
-    response_text = call_groq(prompt, max_tokens=8000)
-    json_text = extract_json_from_response(response_text)
-    try:
-        return json.loads(json_text)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response as JSON for Cinematographer: {str(e)}")
+Script: {script}"""
 
+COSTUME_PROMPT = """Expert costume designer: analyze wardrobe needs. Return JSON only:
+{{"script_title":"","total_pages":{pages},"total_scenes":0,"characters":[{{"character_name":"",
+"character_age":0,"character_role":"","style_notes":"","color_palette":"","costume_count":0,
+"wardrobe_notes":"","special_requirements":[]}}],"scenes":[{{"scene_number":0,"characters":[],
+"costume_changes":[],"special_conditions":[],"continuity_notes":"",
+"estimated_costume_prep_time_minutes":0}}],"wardrobe_budget_estimate":"","continuity_guidelines":[],
+"special_costume_considerations":[]}}
+Script: {script}"""
 
-# --- 4. The Unified Endpoint (Looped Dispatcher) ---
+def analyze_role(role: str, script: str, pages: int) -> dict:
+    prompts = {
+        "director": DIRECTOR_PROMPT,
+        "cinematographer": CAMERA_PROMPT,
+        "costume": COSTUME_PROMPT
+    }
+    prompt = prompts[role].format(pages=pages, script=script)
+    response = call_groq(prompt, max_tokens=8000)
+    return json.loads(extract_json(response))
 
 @app.post("/analyze-script-pdf", response_model=AllAnalysesResult)
-async def analyze_script_pdf(
-    file: UploadFile = File(...)
-):
+async def analyze_script_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="File must be a PDF")
+        raise HTTPException(400, "File must be PDF")
     
-    pdf_bytes = await file.read()
-    script_text, page_count = extract_text_from_pdf(BytesIO(pdf_bytes))
+    script_text, page_count = extract_text_from_pdf(BytesIO(await file.read()))
     if len(script_text) < 100:
-        raise HTTPException(status_code=400, detail="PDF content too short")
+        raise HTTPException(400, "PDF too short")
 
-    # Define all roles to run the analysis for
-    ROLES_TO_ANALYZE = ["director", "cinematographer"]
-    
-    results = {
-        "script_title": "Script Analysis In Progress", # Default title
-        "total_pages": page_count,
-    }
+    results = {"script_title": "Analysis In Progress", "total_pages": page_count}
 
-    # Loop through roles to get all required analyses
-    for role in ROLES_TO_ANALYZE:
-        print(f"Starting analysis for role: {role}")
-
+    for role in ["director", "cinematographer", "costume"]:
         try:
-            if role == "director":
-                # Director analysis: single model call
-                analysis = analyze_for_director(script_text, page_count)
-                # Pydantic validation and assignment
-                results["director_analysis"] = DirectorScriptAnalysis(**analysis) 
-                # Update main title from the first successful analysis
-                if "script_title" in analysis:
-                    results["script_title"] = analysis["script_title"]
-                
-            elif role == "cinematographer":
-                # Cinematographer analysis: requires chunking and merging
-                chunks = split_script_into_chunks(script_text, chunk_size_pages=5)
-                combined_scenes = []
-                combined_shots = []
-                last_chunk_analysis = {}
-
+            if role == "cinematographer":
+                chunks = chunk_text(script_text)
+                scenes, shots = [], []
+                last = {}
                 for chunk in chunks:
-                    chunk_analysis = analyze_for_cinematographer(chunk, page_count=round(len(chunk.split())/250))
-                    # Merge lists from all chunks
-                    combined_scenes.extend(chunk_analysis.get("scenes", []))
-                    combined_shots.extend(chunk_analysis.get("shots", []))
-                    last_chunk_analysis = chunk_analysis # Keep the latest one for top-level data
-
-                analysis = {
-                    **last_chunk_analysis,
-                    "scenes": combined_scenes,
-                    "shots": combined_shots,
-                }
-                # Pydantic validation and assignment
-                results["cinematographer_analysis"] = CameraScriptAnalysis(**analysis) 
-                if "script_title" in analysis:
-                    results["script_title"] = analysis["script_title"]
-
-        except HTTPException as e:
-            print(f"Skipping role {role} due to error: {e.detail}")
-            # Store the error message in the result payload
-            results[f"{role}_analysis"] = {"error": e.detail}
+                    analysis = analyze_role(role, chunk, len(chunk.split())//250)
+                    scenes.extend(analysis.get("scenes", []))
+                    shots.extend(analysis.get("shots", []))
+                    last = analysis
+                analysis = {**last, "scenes": scenes, "shots": shots}
+            else:
+                analysis = analyze_role(role, script_text, page_count)
+            
+            model_map = {
+                "director": DirectorAnalysis,
+                "cinematographer": CameraAnalysis,
+                "costume": CostumeAnalysis
+            }
+            results[f"{role}_analysis"] = model_map[role](**analysis)
+            results["script_title"] = analysis.get("script_title", results["script_title"])
         except Exception as e:
-            print(f"An unexpected error occurred for role {role}: {e}")
-            results[f"{role}_analysis"] = {"error": f"Internal processing error: {str(e)}"}
+            results[f"{role}_analysis"] = {"error": str(e)}
 
-    # Return the aggregated result using the unified model
     return AllAnalysesResult(**results)
 
-# --- Run Application ---
 if __name__ == "__main__":
     import uvicorn
-    # Start the server
     uvicorn.run(app, host="0.0.0.0", port=8000)

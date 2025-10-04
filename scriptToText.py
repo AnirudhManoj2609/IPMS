@@ -11,7 +11,7 @@ from groq import Groq
 
 app = FastAPI(title="Script Analyzer AI", version="1.0.0")
 
-client = Groq(api_key="KEYY")
+client = Groq(api_key="")
 
 app.add_middleware(
     CORSMiddleware,
