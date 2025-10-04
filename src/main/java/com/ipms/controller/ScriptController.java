@@ -1,6 +1,5 @@
 package com.ipms.controller;
 
-import java.security.Principal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -17,13 +16,9 @@ import com.ipms.service.*;
 public class ScriptController {
     
     private final ScriptService sService;
-    private final ScriptAnalysisClient analysisClient;
-    private final UserMovieService userMovieService; 
 
-    public ScriptController(ScriptService scriptService,ScriptAnalysisClient SAC,UserMovieService UMS) {
+    public ScriptController(ScriptService scriptService) {
         sService = scriptService;
-        analysisClient = SAC;
-        this.userMovieService = UMS;
     }
 
     @PostMapping(value = "/add", consumes = {"multipart/form-data"})

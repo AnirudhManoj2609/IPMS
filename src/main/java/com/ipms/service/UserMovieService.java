@@ -2,12 +2,8 @@ package com.ipms.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ipms.model.Movie; 
-import com.ipms.model.User;
-import com.ipms.model.UserMovie;
-import com.ipms.repository.MovieRepository; 
-import com.ipms.repository.UserRepository;
-import com.ipms.repository.UserMovieRepository;
+import com.ipms.model.*;
+import com.ipms.repository.*; 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,10 +59,8 @@ public class UserMovieService {
                     // Convert the role-specific node back into a compact JSON string
                     String roleParametersJson = roleAnalysisNode.toString();
                     
-                    // 5. Update the existing UserMovie entity's parameters field.
                     userMovie.setParameters(roleParametersJson);
                     
-                    // 6. Save the updated entity (database update).
                     userMovieRepository.save(userMovie);
                     
                     System.out.println("Updated analysis for Role: " + userRole + " for User: " + userMovie.getUser().getId());
@@ -81,6 +75,4 @@ public class UserMovieService {
         }
     }
     
-    // NOTE: If you still need a single-user save function for other parts of your app,
-    // you would reimplement it here under a new name, but it is not needed for the batch process.
 }

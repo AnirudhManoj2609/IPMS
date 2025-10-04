@@ -1,3 +1,5 @@
+package com.ipms.config;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -11,11 +13,10 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/**") // allow all endpoints
-                        .allowedOrigins("http://localhost:3000") // frontend URL
+                registry.addMapping("/**")
+                        .allowedOrigins("*") // Allow all origins, for testing
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
+                        .allowedHeaders("*");
             }
         };
     }

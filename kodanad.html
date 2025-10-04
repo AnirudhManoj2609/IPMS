@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test User Registration</title>
+</head>
+<body>
+  <h1>Register User</h1>
+
+  <form id="registerForm">
+    <label>Username: <input type="text" id="username" required></label><br><br>
+    <label>Email: <input type="email" id="email" required></label><br><br>
+    <label>Password: <input type="password" id="password" required></label><br><br>
+    <button type="submit">Register</button>
+  </form>
+
+  <h3>Response:</h3>
+  <pre id="response"></pre>
+
+  <script>
+    const form = document.getElementById("registerForm");
+    const responseEl = document.getElementById("response");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const payload = {
+        username: document.getElementById("username").value,
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value
+      };
+
+      try {
+        const res = await fetch("http://localhost:8080/api/auth/register", { // your Spring Boot backend URL
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        responseEl.textContent = JSON.stringify(data, null, 2);
+
+      } catch (err) {
+        responseEl.textContent = "Error: " + err;
+      }
+    });
+  </script>
+</body>
+</html>
