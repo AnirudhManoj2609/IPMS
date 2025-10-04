@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Receipt</title>
+</head>
+<body>
+    <h2>Upload Receipt Image</h2>
+    <form id="uploadForm">
+        <label>
+            Project ID:
+            <input type="text" id="project_id" name="project_id" required>
+        </label><br><br>
+
+        <label>
+            Receipt Image:
+            <input type="file" id="receipt" name="receipt" accept="image/*" required>
+        </label><br><br>
+
+        <button type="submit">Upload</button>
+    </form>
+
+    <div id="result" style="margin-top: 20px;"></div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const resultDiv = document.getElementById('result');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const projectId = document.getElementById('project_id').value;
+            const receiptFile = document.getElementById('receipt').files[0];
+
+            if (!receiptFile) {
+                resultDiv.innerText = "Please select a receipt image.";
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("project_id", projectId);
+            formData.append("receipt", receiptFile);
+
+            try {
+                const response = await fetch("http://localhost:8000/upload_expense/", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `<p style="color:red;">Error: ${data.detail || "Unknown error"}</p>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `<p style="color:red;">Request failed: ${err}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
