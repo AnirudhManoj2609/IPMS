@@ -27,8 +27,6 @@ public class User {
     @NotBlank
     private String password;
 
-    @NotBlank
-    private String role;
 
     @OneToMany(mappedBy = "user")
     private Set<UserMovie> userMovies;

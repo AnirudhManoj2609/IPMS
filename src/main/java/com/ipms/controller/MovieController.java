@@ -26,8 +26,7 @@ public class MovieController {
         try{
             Movie movie = mService.addMovie(movieDto.getTitle(),movieDto.getGenre());
             if(movie != null){
-                User user = uService.getUser(movieDto.getUserId());
-                mService.addUserToMovie(movie.getId(), movieDto.getUserId(),user.getRole());
+                mService.addUserToMovie(movie.getId(), movieDto.getUserId(),movieDto.getUserRole());
                 UserResponse userResponse = new UserResponse("Script Added Successful!",movie.getId());
                 return new ResponseEntity<>(userResponse,HttpStatus.CREATED);
             }

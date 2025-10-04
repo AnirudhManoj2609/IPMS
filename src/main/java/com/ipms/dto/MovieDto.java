@@ -7,4 +7,5 @@ public class MovieDto {
     private Long userId;
     private String genre;
     private String title;
+    private String userRole;
 }
