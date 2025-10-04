@@ -1,6 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import JSONResponse
-from datetime import datetime, date
+from datetime import datetime, date, timedelta # Added timedelta for historical analysis
 from typing import Dict, List, Any, Optional
 import uuid
 import json
@@ -8,20 +8,18 @@ import logging
 import asyncio
 import random
 import numpy as np
+import requests # Necessary for the call_gemini_api function
 
 # --- CONFIGURATION AND SETUP ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# NOTE: Since this is a single, self-contained file execution environment, 
-# we are simulating MongoDB collections using in-memory dictionaries. 
-# In a real app, you would use 'motor' (async PyMongo driver) here.
 
 # Simulated MongoDB Collections
 db: Dict[str, List[Dict[str, Any]]] = {
     "personnel": [],      # Crew members and their roles/leaders
     "attendance": [],     # Daily check-in/absence records
     "resource_usage": [], # Daily tracking of props, equipment, etc.
+    "item_collection": [], # <-- NEW: Daily tracking of items collected (set dressings, props, etc.)
     "daily_logs": []      # AI-generated daily summaries
 }
 
@@ -43,6 +41,7 @@ def db_find(collection_name: str, query: Dict[str, Any]) -> List[Dict[str, Any]]
     for doc in collection:
         match = True
         for key, value in query.items():
+            # Special handling for date comparisons if necessary, but simple match for now
             if doc.get(key) != value:
                 match = False
                 break
@@ -82,6 +81,7 @@ async def call_gemini_api(payload: Dict[str, Any], max_retries: int = 3) -> Opti
             if attempt < max_retries - 1:
                 wait_time = 2 ** attempt
                 await asyncio.sleep(wait_time)
+                # print(f"Retry {attempt + 1}: Waiting {wait_time}s...") # Suppress debug logging for user
             else:
                 logger.error(f"Gemini API failed after {max_retries} attempts: {e}")
                 return None
@@ -93,10 +93,11 @@ async def call_gemini_api(payload: Dict[str, Any], max_retries: int = 3) -> Opti
 def analyze_historical_data(collection_name: str, project_id: str, key: str) -> Dict[str, Any]:
     """
     Simulates historical analysis for anomaly detection.
-    In a real MongoDB setup, this would be an aggregate query.
+    (This function remains mostly the same as it primarily targets attendance, 
+    but it's good practice to keep it flexible.)
     """
     
-    # 1. Calculate past 7 days average usage
+    # Calculate past 7 days average usage
     seven_days_ago = (datetime.utcnow().date() - timedelta(days=7)).isoformat()
     
     recent_docs = [
@@ -126,36 +127,31 @@ def analyze_historical_data(collection_name: str, project_id: str, key: str) -> 
 
 async def generate_ai_report(project_id: str, report_date: str) -> str:
     """
-    Uses the Gemini API to synthesize raw data into a narrative daily production report.
-    This is the core 'AI' dynamic reporting feature.
+    Uses the Gemini API to synthesize raw data from all logs into a narrative daily production report.
     """
     
     # --- 1. Fetch Raw Data for the Day ---
     attendance_data = db_find_one("attendance", {"project_id": project_id, "date": report_date})
     resource_data = db_find("resource_usage", {"project_id": project_id, "date": report_date})
+    item_collection_data = db_find("item_collection", {"project_id": project_id, "date": report_date}) # <-- NEW FETCH
     all_personnel = get_db_collection("personnel")
     
-    if not attendance_data and not resource_data:
-        return "No data logged for this date. Cannot generate AI report."
+    if not attendance_data and not resource_data and not item_collection_data:
+        return "No relevant data logged for this date. Cannot generate AI report."
 
     # --- 2. Perform Anomaly Detection and Contextualization ---
     
-    # Attendance Analysis
-    attendance_summary = ""
+    # Attendance Analysis (remains the same)
+    attendance_summary = "No attendance log submitted."
     if attendance_data:
         present_count = len(attendance_data.get("present_ids", []))
         absent_count = len(attendance_data.get("absent_ids", []))
-        
         hist_attendance = analyze_historical_data("attendance", project_id, "present_ids")
         
-        anomaly_status = ""
+        anomaly_status = "Attendance is stable and on track with historical averages."
         if present_count < hist_attendance.get("avg_present", 0) - hist_attendance.get("present_std", 0) * 1.5:
             anomaly_status = f"CRITICAL ANOMALY: Crew present ({present_count}) is significantly lower than average ({hist_attendance['avg_present']}). Production likely impacted."
-        elif absent_count > hist_attendance.get("avg_absent", 0) + hist_attendance.get("present_std", 0):
-            anomaly_status = f"WARNING: Absent count ({absent_count}) is slightly higher than usual."
-        else:
-            anomaly_status = "Attendance is stable and on track with historical averages."
-            
+        
         absent_names = [p['name'] for p in all_personnel if p['_id'] in attendance_data.get("absent_ids", [])]
         
         attendance_summary = f"""
@@ -165,18 +161,39 @@ async def generate_ai_report(project_id: str, report_date: str) -> str:
         - Historical Alert: {anomaly_status}
         """
 
-    # Resource Analysis
-    resource_summary = ""
+    # Resource Analysis (Daily Check-Out)
+    resource_summary = "No equipment/resource check-out logs submitted."
     if resource_data:
-        resource_items = [f"{r['resource_type']}: {r['item_name']} (Qty: {r['quantity']})" for r in resource_data]
+        resource_items = [f"({r['reporter_name']}) {r['resource_type']}: {r['item_name']} (Qty: {r['quantity']}). Notes: {r.get('notes') or 'None'}" for r in resource_data]
         resource_summary = "\n- ".join(["Resources Logged:"] + resource_items)
+
+    # Item Collection Analysis (NEW - Daily Check-In/Progress)
+    item_collection_summary = "No specific item collection/check-in logs submitted for the day."
+    if item_collection_data:
+        all_collected_items = []
+        for log in item_collection_data:
+            all_collected_items.extend(log.get('item_names', []))
+            
+        unique_collected_items = set(all_collected_items)
+        reporters = set(log.get('reporter_name', 'Unknown') for log in item_collection_data)
+        notes_detail = [f"({log['reporter_name']}): {log['notes']}" for log in item_collection_data if log.get('notes')]
+
+        item_collection_summary = f"""
+        - Total unique items logged as collected/used/checked-in: {len(unique_collected_items)}
+        - Collected/Used Items: {', '.join(unique_collected_items) if unique_collected_items else 'None'}
+        - Reported By Dept Heads: {', '.join(reporters)}
+        - Specific Notes/Storage/Condition: {'; '.join(notes_detail) or 'None'}
+        """
 
     # --- 3. Construct LLM Prompt ---
     
     system_prompt = (
-        "You are an AI Production Coordinator. Your task is to analyze the raw daily logs "
+        "You are an AI Production Coordinator. Your task is to analyze all raw daily logs "
         "and generate a single, highly concise, narrative summary report for the film's "
-        "Executive Producer. Focus on deviations, critical attendance issues, and resource use."
+        "Executive Producer. Focus on deviations, critical attendance issues, resource use, "
+        "and most importantly, the **status of collected/critical items**. Synthesize the "
+        "Resource Usage and Item Collection notes to flag if equipment or collected props were "
+        "left behind, or if their condition is poor. Announce any item that needs immediate attention."
         "The report should be professional and actionable, with a title and three paragraphs."
     )
     
@@ -186,8 +203,11 @@ async def generate_ai_report(project_id: str, report_date: str) -> str:
     --- Attendance Data ---
     {attendance_summary}
     
-    --- Resource Usage ---
+    --- Resource Usage (Daily Check-Out/Used) ---
     {resource_summary}
+
+    --- Item Collection (Daily Check-In/Progress) ---
+    {item_collection_summary}
     """
     
     payload = {
@@ -249,17 +269,17 @@ async def log_attendance(
     reporter_name: str = Form(...) # The leader reporting the status
 ):
     """
-    Logs attendance for a specific day. Requires names of present and absent crew.
-    Only allows one attendance log per day per project.
+    Logs attendance for a specific day.
     """
     
     # 1. Check if the reporter is a registered crew member
     reporter_doc = db_find_one("personnel", {"project_id": project_id, "name": reporter_name})
     if not reporter_doc:
-        raise HTTPException(status_code=403, detail="Reporter not recognized in personnel list.")
+        raise HTTPException(status_code=403, detail="Reporter not recognized in personnel list. Add the reporter first.")
 
     # 2. Check for existing log
     if db_find_one("attendance", {"project_id": project_id, "date": report_date}):
+        # In a real app, you would update the existing record
         raise HTTPException(status_code=400, detail=f"Attendance log already exists for {report_date}. Use a PUT/UPDATE method to modify.")
         
     all_personnel_docs = db_find("personnel", {"project_id": project_id})
@@ -268,9 +288,6 @@ async def log_attendance(
     present_ids = [name_to_id.get(name) for name in present_names if name in name_to_id]
     absent_ids = [name_to_id.get(name) for name in absent_names if name in name_to_id]
     
-    if len(present_ids) + len(absent_ids) != len(all_personnel_docs):
-        logger.warning("Mismatched attendance: not all crew accounted for.")
-
     attendance_log = {
         "project_id": project_id,
         "date": report_date,
@@ -280,7 +297,37 @@ async def log_attendance(
     }
     
     doc = db_insert_one("attendance", attendance_log)
-    return {"message": f"Attendance logged for {report_date}", "attendance_id": doc['_id']}
+    return {"message": f"Attendance logged for {report_date} by {reporter_name}", "attendance_id": doc['_id']}
+
+# --- NEW ENDPOINT FOR ITEM COLLECTION LOGS ---
+@app.post("/items/log/")
+async def log_item_collection(
+    project_id: str = Form(...),
+    report_date: str = Form(...),
+    reporter_name: str = Form(...), # Enforced head of role reporting
+    item_names: List[str] = Form(...), # List of items collected/used
+    notes: Optional[str] = Form(None)
+):
+    """
+    Logs items collected, checked-in, or used for the day.
+    """
+    # 1. Check if the reporter is a registered crew member
+    reporter_doc = db_find_one("personnel", {"project_id": project_id, "name": reporter_name})
+    if not reporter_doc:
+        raise HTTPException(status_code=403, detail="Reporter not recognized in personnel list. Add the reporter first.")
+
+    item_log = {
+        "project_id": project_id,
+        "date": report_date,
+        "reported_by_id": reporter_doc['_id'],
+        "reporter_name": reporter_name,
+        "item_names": item_names, # List of strings
+        "notes": notes
+    }
+    
+    doc = db_insert_one("item_collection", item_log)
+    return {"message": f"Item collection logged successfully by {reporter_name}", "log_id": doc['_id']}
+# --- END NEW ENDPOINT ---
 
 @app.post("/resources/log/")
 async def log_resource_usage(
@@ -289,14 +336,22 @@ async def log_resource_usage(
     resource_type: str = Form(...),
     item_name: str = Form(...),
     quantity: int = Form(1),
+    reporter_name: str = Form(...), # <-- FIXED: Enforce reporting leader
     notes: Optional[str] = Form(None)
 ):
     """
     Tracks resource or equipment usage for the day.
     """
+    # 1. Check if the reporter is a registered crew member
+    reporter_doc = db_find_one("personnel", {"project_id": project_id, "name": reporter_name})
+    if not reporter_doc:
+        raise HTTPException(status_code=403, detail="Reporter not recognized in personnel list. Add the reporter first.")
+        
     resource_log = {
         "project_id": project_id,
         "date": report_date,
+        "reported_by_id": reporter_doc['_id'],
+        "reporter_name": reporter_name,
         "resource_type": resource_type, # e.g., Camera, Prop, Location Area
         "item_name": item_name,
         "quantity": quantity,
@@ -304,13 +359,12 @@ async def log_resource_usage(
     }
     
     doc = db_insert_one("resource_usage", resource_log)
-    return {"message": f"Resource usage logged for {item_name}", "log_id": doc['_id']}
+    return {"message": f"Resource usage logged for {item_name} by {reporter_name}", "log_id": doc['_id']}
 
 @app.get("/report/daily_summary/{project_id}/{report_date}")
 async def get_daily_summary(project_id: str, report_date: str):
     """
     Generates the AI-enhanced daily summary report by synthesizing all logged data.
-    This feature is dynamic and high-value.
     """
     
     # 1. Check if report already exists
@@ -324,6 +378,9 @@ async def get_daily_summary(project_id: str, report_date: str):
         
     # 2. Generate and save new report
     report_text = await generate_ai_report(project_id, report_date)
+    
+    if "No relevant data logged" in report_text:
+         raise HTTPException(status_code=404, detail=report_text)
     
     if "Failed to generate AI report" in report_text:
         raise HTTPException(status_code=500, detail=report_text)
@@ -342,6 +399,7 @@ async def get_project_status(project_id: str):
     total_crew = len(db_find("personnel", {"project_id": project_id}))
     total_attendance_days = len(db_find("attendance", {"project_id": project_id}))
     total_resource_logs = len(db_find("resource_usage", {"project_id": project_id}))
+    total_item_collection_logs = len(db_find("item_collection", {"project_id": project_id})) # <-- NEW COUNT
     total_ai_reports = len(db_find("daily_logs", {"project_id": project_id}))
     
     return {
@@ -350,6 +408,7 @@ async def get_project_status(project_id: str):
             "total_crew_members": total_crew,
             "attendance_logs_count": total_attendance_days,
             "resource_logs_count": total_resource_logs,
+            "item_collection_logs_count": total_item_collection_logs, # <-- NEW
             "ai_reports_generated": total_ai_reports
         },
         "message": "Data structures are ready for logging."
