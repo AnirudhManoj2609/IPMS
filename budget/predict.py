@@ -12,20 +12,41 @@ import uuid
 import numpy as np
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
+import os
+from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Film Budget Tracker (MongoDB)")
 
-# ----- MongoDB Setup -----
-MONGO_URI = "mongodb://localhost:27017"
-DB_NAME = "film_budget_db"
+load_dotenv()
 
-client = AsyncIOMotorClient(MONGO_URI)
+# --- MONGODB SETUP ---
+MONGO_URL = os.getenv("MONGO")
+DB_NAME = "budget_tracker"
+
+client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
+
 budgets_col = db["budgets"]
 expenses_col = db["expenses"]
+
+# --- CORS CONFIGURATION ---
+origins = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://127.0.0.1:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ----- OCR & Expense Categorization -----
 def preprocess_image_for_ocr(image: Image.Image) -> Image.Image:

@@ -1,62 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Upload Receipt</title>
+<meta charset="UTF-8">
+<title>Upload Receipt</title>
+<style>
+    /* Base styles */
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+
+    /* Card container */
+    .upload-card {
+        background: #fff;
+        border-radius: 15px;
+        padding: 40px 30px;
+        width: 450px;
+        text-align: center;
+        box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .upload-card:hover { transform: translateY(-5px); }
+
+    h2 { margin-bottom: 25px; color: #333; }
+
+    /* Drag-and-drop area */
+    .drop-zone {
+        border: 2px dashed #bbb;
+        border-radius: 12px;
+        padding: 40px;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        color: #666;
+        margin-bottom: 20px;
+    }
+    .drop-zone.dragover {
+        border-color: #007BFF;
+        background: #e6f0ff;
+        color: #007BFF;
+    }
+
+    /* Hidden input */
+    #receipt { display: none; }
+
+    /* Button styling */
+    button {
+        background: #007BFF;
+        color: #fff;
+        border: none;
+        padding: 14px 30px;
+        border-radius: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    button:hover { background: #0056b3; }
+
+    /* Result display */
+    #result {
+        margin-top: 25px;
+        text-align: left;
+        font-family: monospace;
+        background: #f1f3f5;
+        padding: 15px;
+        border-radius: 10px;
+        max-height: 220px;
+        overflow-y: auto;
+        word-break: break-word;
+    }
+
+    /* Hidden project_id input */
+    #project_id { display: none; }
+</style>
 </head>
 <body>
-    <h2>Upload Receipt Image</h2>
-    <form id="uploadForm">
-        <label>
-            Project ID:
-            <input type="text" id="project_id" name="project_id" required>
-        </label><br><br>
 
-        <label>
-            Receipt Image:
-            <input type="file" id="receipt" name="receipt" accept="image/*" required>
-        </label><br><br>
+<div class="upload-card">
+    <h2>Upload Receipt</h2>
 
-        <button type="submit">Upload</button>
-    </form>
+    <input type="text" id="project_id" value="1">
 
-    <div id="result" style="margin-top: 20px;"></div>
+    <div class="drop-zone" id="dropZone">Drag & Drop Receipt Here<br>or Click to Select</div>
+    <input type="file" id="receipt" name="receipt" accept="image/*">
 
-    <script>
-        const form = document.getElementById('uploadForm');
-        const resultDiv = document.getElementById('result');
+    <button id="uploadBtn">Upload</button>
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+    <div id="result"></div>
+</div>
 
-            const projectId = document.getElementById('project_id').value;
-            const receiptFile = document.getElementById('receipt').files[0];
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const receiptInput = document.getElementById('receipt');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const resultDiv = document.getElementById('result');
+    const projectIdInput = document.getElementById('project_id');
 
-            if (!receiptFile) {
-                resultDiv.innerText = "Please select a receipt image.";
-                return;
+    // Click on drop zone opens file selector
+    dropZone.addEventListener('click', () => receiptInput.click());
+
+    // Drag-and-drop effects
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            receiptInput.files = e.dataTransfer.files;
+            dropZone.textContent = e.dataTransfer.files[0].name;
+        }
+    });
+
+    // Update drop zone text when file selected via input
+    receiptInput.addEventListener('change', () => {
+        if (receiptInput.files.length > 0) {
+            dropZone.textContent = receiptInput.files[0].name;
+        } else {
+            dropZone.textContent = "Drag & Drop Receipt Here\nor Click to Select";
+        }
+    });
+
+    // Upload button click
+    uploadBtn.addEventListener('click', async () => {
+        const receiptFile = receiptInput.files[0];
+        if (!receiptFile) {
+            resultDiv.innerHTML = `<p style="color:red;">Please select a receipt image.</p>`;
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("project_id", projectIdInput.value);
+        formData.append("receipt", receiptFile);
+
+        try {
+            const response = await fetch("http://localhost:8000/upload_expense/", {
+                method: "POST",
+                body: formData
+            });
+            const data = await response.json();
+            if (response.ok) {
+                resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } else {
+                resultDiv.innerHTML = `<p style="color:red;">Error: ${data.detail || "Unknown error"}</p>`;
             }
+        } catch (err) {
+            resultDiv.innerHTML = `<p style="color:red;">Request failed: ${err}</p>`;
+        }
+    });
+</script>
 
-            const formData = new FormData();
-            formData.append("project_id", projectId);
-            formData.append("receipt", receiptFile);
-
-            try {
-                const response = await fetch("http://localhost:8000/upload_expense/", {
-                    method: "POST",
-                    body: formData
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-                } else {
-                    resultDiv.innerHTML = `<p style="color:red;">Error: ${data.detail || "Unknown error"}</p>`;
-                }
-            } catch (err) {
-                resultDiv.innerHTML = `<p style="color:red;">Request failed: ${err}</p>`;
-            }
-        });
-    </script>
 </body>
 </html>
